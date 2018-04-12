@@ -88,7 +88,7 @@ class MyUserListener(tweepy.StreamListener):
                         print('Error in message syntax! Not enough arguments in message.')
                         return False
                 
-                newkws = None if msg[1]!='stop' else msg[2].split('::')
+                newkws = None if msg[1]=='stop' else msg[2].split('::')
                         
                 if msg[1] == 'replace': # delete original keyword list (except codeword) and add all specified keywords
                         del kw[1:] 
