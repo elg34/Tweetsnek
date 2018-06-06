@@ -55,13 +55,17 @@ class MyTweetListener(tweepy.StreamListener):
         def on_error(self, status):
                 print(status)
                 if status == 420:
-                        print('Too many connection attempts in tweet stream!')
-                        return False #returning disconnects the stream
+                        raise ValueError('Too many connection attempts in tweet stream!')
+                else:
+                        raise ValueError('Too many connection attempts in tweet stream!')
+                return False #returning disconnects the stream
+
                 
 class MyUserListener(tweepy.StreamListener):
         def __init__(self, kw):
                 print('Initialising User DM stream...')
                 self.run = True # Variable to stop whole script from DM
+                self.error=None
         
         def on_data(self, data):
                 if 'direct_message' in data:
@@ -73,6 +77,10 @@ class MyUserListener(tweepy.StreamListener):
                                 if not parse:
                                         print('Stop signal received, else could not parse DM syntax! Did not change keywords.')
                                 else:
+                                        print('New keywords: '+' '.join(kw))
+                                        with open(KWFILE, 'w') as fp:  
+                                                for i in kw[1:]:
+                                                        fp.write(i+'\n')
                                         print('Successfully parsed DM. Quitting DM stream.')
                                         return False #returning disconnects the stream
                         else:
@@ -117,31 +125,12 @@ class MyUserListener(tweepy.StreamListener):
                                         
         def on_error(self, status):
                 print(status)
+                error=status
                 if status == 420:
-                        print('Too many connection attempts in DM stream!')
+                        raise ValueError('Too many connection attempts in DM stream!')
                         return False #returning disconnects the stream
 
-
-if __name__ == '__main__':
-
-        # Authentification
-        auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-        auth.set_access_token(access_token, access_token_secret)
-        
-        # initialise keyword list with signal for kw parser
-        kw = list([PARSESIG])
-        
-        # if script has previously been aborted, load keywords from previous file
-        if Path(KWFILE).exists():
-                with open(KWFILE, 'r') as fp:  
-                        line = fp.readline()
-                        while line:
-                                kw.append(line.rstrip())
-                                line = fp.readline()
-        
-        # API for DM returns
-        api = tweepy.API(auth)
-        
+def runTweetsnek():
         # listeners and stream for filtered tweets and user dm's respectively
         tweetstream = tweepy.Stream(auth, MyTweetListener(kw))
         userstream = tweepy.Stream(auth, MyUserListener(kw))
@@ -153,11 +142,39 @@ if __name__ == '__main__':
                 p.start()
                 userstream.userstream() # keep monitoring for keyword change or stop signal, blocking call
                 api.send_direct_message(user_id = USERID, text = 'New keywords: '+' '.join(kw))
-                print('New keywords: '+' '.join(kw))
-                with open(KWFILE, 'w') as fp:  
-                        for i in kw[1:]:
-                                fp.write(i+'\n')
                 #print(tweetstream.listener.tcount,':',tweetstream.listener.filename) # killing the process messes with these paraeters -> I think they just get reset
                 p.terminate() # sad way to end, but twitter doesnt give me a choice
+                
+if __name__ == '__main__':
+        # Authentification
+        auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+        auth.set_access_token(access_token, access_token_secret)
+
+        # initialise keyword list with signal for kw parser
+        kw = list([PARSESIG])
+
+        # if script has previously been aborted, load keywords from previous file
+        if Path(KWFILE).exists():
+                with open(KWFILE, 'r') as fp:  
+                        line = fp.readline()
+                        while line:
+                                kw.append(line.rstrip())
+                                line = fp.readline()
+
+        # API for DM returns
+        api = tweepy.API(auth)
+        
+        connection_attempts = 1
+        while connection_attempts <= 10:
+                try:
+                        runTweetsnek()
+                except Exception as e:
+                        print(e)
+                        msg = 'Connection attempt: '+connection_attempts+':: Waiting'+60*connection_attempts+'seconds before trying to reconnect...'
+                        print(msg)
+                        api.send_direct_message(user_id = USERID, text = msg)
+                        connection_attempts=connection_attempts+1
+                        time.sleep(60*connection_attempts)
+                
         api.send_direct_message(user_id = USERID, text = 'Script dying... send help...')
         print('Exiting script...')
