@@ -84,7 +84,7 @@ class MyUserListener(tweepy.StreamListener):
                 if msg[0]!=PARSESIG: # if first word is not the codeword
                         print('Error in message syntax! First word not keyword.')
                         return False
-                if len(msg)<3 or (len(msg)==2 and msg[1]!='stop'):
+                if len(msg)<2 or (len(msg)==2 and msg[1]!='stop'):
                         print('Error in message syntax! Not enough arguments in message.')
                         return False
                 
