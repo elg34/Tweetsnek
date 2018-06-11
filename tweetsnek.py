@@ -4,6 +4,9 @@ from multiprocessing import Process
 from pathlib import Path
 import time
 import sys
+import logging
+
+logging.basicConfig(filename='err.log')
 
 # Auth keys and secrets
 consumer_key = 'XXXXXXXXXXX'
@@ -21,7 +24,7 @@ KWFILE = 'kw.txt'               # get file for keywords
 ## PARSESIG {replace/add/remove/stop} {optional: KW1::KW2}
 
 class MyTweetListener(tweepy.StreamListener):
-        def __init__(self,kw):
+        def __init__(self):
                 print('Initializing Stream of Tweets...')
                 print('Now tracking:',' '.join(kw))
                 self.tcount = 0 # current number of tweets in file
@@ -30,11 +33,22 @@ class MyTweetListener(tweepy.StreamListener):
         
         def on_data(self, data):
                 tweet = json.loads(data) # load tweet data
-                #print('@%s: %s' % (tweet['user']['screen_name'], tweet['text'])) # print tweet in console
                 
                 # increment counter for file name change
                 self.tcount += 1
-                print(self.tcount,'/',self.max_tw,':',tweet['user']['screen_name'])
+                
+                # printouts
+                if 'user' in tweet and 'screen_name' in tweet['user']:
+                    print(self.tcount,'/',self.max_tw,':',tweet['user']['screen_name'])
+                
+                if 'extended_tweet' in tweet and 'full_text' in tweet['extended_tweet']:
+                        print(tweet['extended_tweet']['full_text'])
+                elif 'retweeted_status' in tweet and 'extended_tweet' in tweet['retweeted_status'] and 'full_text' in tweet['retweeted_status']['extended_tweet']:
+                        print(tweet['retweeted_status']['extended_tweet']['full_text'])
+                else:
+                        print(tweet['text'])
+                
+                # maximum file size reached
                 if self.tcount > self.max_tw:
                         print('If statement called!',self.tcount)
                         self.filename = 'data/'+time.strftime("%Y%m%d-%H%M%S") + '.txt'
@@ -54,14 +68,23 @@ class MyTweetListener(tweepy.StreamListener):
 
         def on_error(self, status):
                 print(status)
-                if status == 420:
-                        print('Too many connection attempts in tweet stream!')
-                        return False #returning disconnects the stream
+                logging.warning('In tweet stream:'+str(status))
+                try_dm('Tweet stream error! '+ str(status))
+                userstream.listener.stop()
+                return False #returning disconnects the stream
+                
+        def on_exception(self, e):
+                print(str(e))
+                logging.warning('In tweet stream:'+str(e))
+                userstream.listener.stop()
+                return False #returning disconnects the stream
+                
                 
 class MyUserListener(tweepy.StreamListener):
-        def __init__(self, kw):
-                print('Initialising User DM stream...')
-                self.run = True # Variable to stop whole script from DM
+        def __init__(self):
+                try_dm('Script ready, waiting for commands! Syntax: ' + PARSESIG + ' {replace/add/remove/stop} {optional: KW1::KW2} Currently set keywords: '+' '.join(kw))
+                self.run = True
+                self.error = False
         
         def on_data(self, data):
                 if 'direct_message' in data:
@@ -73,8 +96,15 @@ class MyUserListener(tweepy.StreamListener):
                                 if not parse:
                                         print('Stop signal received, else could not parse DM syntax! Did not change keywords.')
                                 else:
+                                        try_dm('Currently set keywords: '+' '.join(kw))
+                                        with open(KWFILE, 'w') as fp:  
+                                                for i in kw[1:]:
+                                                        fp.write(i+'\n')
                                         print('Successfully parsed DM. Quitting DM stream.')
                                         return False #returning disconnects the stream
+                        elif 'INTERRUPT' in data:
+                                self.error = True
+                                return False
                         else:
                                 print('Note: Received unrelated DM!')
                                 
@@ -116,11 +146,27 @@ class MyUserListener(tweepy.StreamListener):
                 return success
                                         
         def on_error(self, status):
-                print(status)
-                if status == 420:
-                        print('Too many connection attempts in DM stream!')
-                        return False #returning disconnects the stream
+                logging.warning('In DM stream:'+str(status))
+                try_dm('DM stream error! '+ str(status))
+                self.error = True
+                return False #returning disconnects the stream
+                
+        def on_exception(self, e):
+                print(str(e))
+                logging.warning('In DM stream:'+str(e))
+                self.error = True
+                return False #returning disconnects the stream
+        
+        def stop(self):
+                self.on_data('INTERRUPT')
+                return True
 
+def try_dm(text):
+        try:
+                api.send_direct_message(user_id = USERID, text = text)
+        except:
+                pass
+        print(text)
 
 if __name__ == '__main__':
 
@@ -143,21 +189,30 @@ if __name__ == '__main__':
         api = tweepy.API(auth)
         
         # listeners and stream for filtered tweets and user dm's respectively
-        tweetstream = tweepy.Stream(auth, MyTweetListener(kw))
-        userstream = tweepy.Stream(auth, MyUserListener(kw))
+        userstream = tweepy.Stream(auth, MyUserListener())
+        tweetstream = tweepy.Stream(auth, MyTweetListener())
         
-        print('Script ready, waiting for commands! Syntax: ' + kw[0] + ' {replace/add/remove/stop} {optional: KW1::KW2}')
-        api.send_direct_message(user_id = USERID, text = 'Script ready, waiting for commands! Syntax: ' + kw[0] + ' {replace/add/remove/stop} {optional: KW1::KW2}')
-        while userstream.listener.run:
+        connection_attempts = 0
+        last_connect=time.time()
+        while userstream.listener.run and connection_attempts<=5:
+                try_dm('Starting streams...')
                 p = Process(target = tweetstream.filter, kwargs = dict(track=kw)) # setup
                 p.start()
                 userstream.userstream() # keep monitoring for keyword change or stop signal, blocking call
-                api.send_direct_message(user_id = USERID, text = 'New keywords: '+' '.join(kw))
-                print('New keywords: '+' '.join(kw))
-                with open(KWFILE, 'w') as fp:  
-                        for i in kw[1:]:
-                                fp.write(i+'\n')
-                #print(tweetstream.listener.tcount,':',tweetstream.listener.filename) # killing the process messes with these paraeters -> I think they just get reset
-                p.terminate() # sad way to end, but twitter doesnt give me a choice
-        api.send_direct_message(user_id = USERID, text = 'Script dying... send help...')
-        print('Exiting script...')
+                p.terminate()
+                p.join()
+                if userstream.listener.error:
+                        try_dm('Encountered an error! Attempting to reconnect in 60 seconds! Connection attempt: '+str(connection_attempts))
+                        time.sleep(60)
+                        new_connect = time.time()
+                        if new_connect-last_connect<3600:
+                                connection_attempts = connection_attempts+1
+                        else:
+                                last_connect = new_connect
+                                connection_attempts = 0
+                        userstream.listener.error = False
+                        
+        if connection_attempts>=5:
+                try_dm('Too many connection attempts! Shutting down...')
+        else:
+                try_dm('Shutting down...')
