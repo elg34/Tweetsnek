@@ -68,7 +68,7 @@ class MyTweetListener(tweepy.StreamListener):
 
         def on_error(self, status):
                 print(status)
-                logging.warning(time.strftime(time.strftime("%Y%m%d-%H%M%S")+'::In tweet stream:'+str(status))
+                logging.warning(time.strftime("%Y%m%d-%H%M%S")+'::In tweet stream:'+str(status))
                 try_dm('Tweet stream error! '+ str(status))
                 userstream.listener.stop()
                 return False #returning disconnects the stream
