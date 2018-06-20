@@ -102,9 +102,6 @@ class MyUserListener(tweepy.StreamListener):
                                                         fp.write(i+'\n')
                                         print('Successfully parsed DM. Quitting DM stream.')
                                         return False #returning disconnects the stream
-                        elif 'Tweet stream' in data:
-                                self.error = True
-                                return False
                         else:
                                 print('Note: Received unrelated DM!')
                                 
@@ -160,6 +157,7 @@ class MyUserListener(tweepy.StreamListener):
         def stop(self):
                 self.error = True
                 return False
+
 
 def try_dm(text):
         try:
