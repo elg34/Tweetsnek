@@ -6,7 +6,7 @@ import time
 import sys
 import logging
 
-logging.basicConfig(filename='err.log')
+logging.basicConfig(filename='error.log')
 
 # Auth keys and secrets
 consumer_key = 'XXXXXXXXXXX'
@@ -68,14 +68,14 @@ class MyTweetListener(tweepy.StreamListener):
 
         def on_error(self, status):
                 print(status)
-                logging.warning('In tweet stream:'+str(status))
+                logging.warning(time.strftime(time.strftime("%Y%m%d-%H%M%S")+'::In tweet stream:'+str(status))
                 try_dm('Tweet stream error! '+ str(status))
                 userstream.listener.stop()
                 return False #returning disconnects the stream
                 
         def on_exception(self, e):
                 print(str(e))
-                logging.warning('In tweet stream:'+str(e))
+                logging.warning(time.strftime("%Y%m%d-%H%M%S")+'::In tweet stream:'+str(e))
                 userstream.listener.stop()
                 return False #returning disconnects the stream
                 
@@ -102,7 +102,7 @@ class MyUserListener(tweepy.StreamListener):
                                                         fp.write(i+'\n')
                                         print('Successfully parsed DM. Quitting DM stream.')
                                         return False #returning disconnects the stream
-                        elif 'INTERRUPT' in data:
+                        elif 'Tweet stream' in data:
                                 self.error = True
                                 return False
                         else:
@@ -146,20 +146,20 @@ class MyUserListener(tweepy.StreamListener):
                 return success
                                         
         def on_error(self, status):
-                logging.warning('In DM stream:'+str(status))
+                logging.warning(time.strftime("%Y%m%d-%H%M%S")+'::In DM stream:'+str(status))
                 try_dm('DM stream error! '+ str(status))
                 self.error = True
                 return False #returning disconnects the stream
                 
         def on_exception(self, e):
                 print(str(e))
-                logging.warning('In DM stream:'+str(e))
+                logging.warning(time.strftime("%Y%m%d-%H%M%S")+'::In DM stream:'+str(e))
                 self.error = True
                 return False #returning disconnects the stream
         
         def stop(self):
-                self.on_data('INTERRUPT')
-                return True
+                self.error = True
+                return False
 
 def try_dm(text):
         try:
@@ -203,7 +203,7 @@ if __name__ == '__main__':
                 p.join()
                 if userstream.listener.error:
                         try_dm('Encountered an error! Attempting to reconnect in 60 seconds! Connection attempt: '+str(connection_attempts))
-                        time.sleep(60)
+                        time.sleep(60*(1+connection_attempts))
                         new_connect = time.time()
                         if new_connect-last_connect<3600:
                                 connection_attempts = connection_attempts+1
