@@ -5,6 +5,7 @@ from pathlib import Path
 import time
 import sys
 import logging
+import numpy as np
 
 logging.basicConfig(filename='error.log')
 
@@ -242,17 +243,20 @@ if __name__ == '__main__':
         last_connect=time.time()
         restart = True
         error = False
+        mins = np.array([1,5,15]) * 60
         while restart and connection_attempts<settings['MAX_CON']:
-                print('Connection attempt:',connection_attempts)
+                print('Connection attempt:',connection_attempts+1)
                 snek = setup_snek(settings)
                 if snek['stop']:
                         restart=False
                 if len(snek['mesgs'])>0 and not snek['stop']:
                         new_connect = time.time()
-                        if new_connect-last_connect<(settings['CON_RESET']*120):
+                        waitforit = mins[connection_attempts] if connection_attempts<len(mins) else max(mins)
+                        if new_connect-last_connect<(settings['CON_RESET']*60*60):
                                 print('Time since last connect:',new_connect-last_connect)
                                 connection_attempts = connection_attempts+1
                         else:
                                 last_connect = new_connect
                                 connection_attempts = 0
-                        time.sleep(60*(1+connection_attempts))
+                        print('Sleeping for',waitforit/60,'minutes!')
+                        time.sleep(waitforit)
