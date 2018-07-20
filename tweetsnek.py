@@ -224,7 +224,7 @@ def setup_snek(settings):
         if stop:
                 exitmesg = 'Exiting script...'
         elif len(errors)>0:
-                exitmesg = '::'.join(errors)  + 'Attempting restart...'
+                exitmesg = '::'.join(errors)  + ' Attempting restart (no further commands accepted!)...'
         else:
                 exitmesg = 'Attempting restart...'
         try:
@@ -238,21 +238,21 @@ def setup_snek(settings):
         return dict(mesgs=errors,stop=stop)
 
 if __name__ == '__main__':
-        connection_attempts = 1
+        connection_attempts = 0
         last_connect=time.time()
         restart = True
         error = False
-        while restart and connection_attempts<=settings['MAX_CON']:
+        while restart and connection_attempts<settings['MAX_CON']:
                 print('Connection attempt:',connection_attempts)
                 snek = setup_snek(settings)
                 if snek['stop']:
                         restart=False
-                if len(snek['mesgs'])>0:
+                if len(snek['mesgs'])>0 and not snek['stop']:
                         new_connect = time.time()
                         if new_connect-last_connect<(settings['CON_RESET']*120):
                                 print('Time since last connect:',new_connect-last_connect)
                                 connection_attempts = connection_attempts+1
                         else:
                                 last_connect = new_connect
-                                connection_attempts = 1
-                        time.sleep(60*connection_attempts)
+                                connection_attempts = 0
+                        time.sleep(60*(1+connection_attempts))
