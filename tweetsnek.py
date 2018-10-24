@@ -165,6 +165,22 @@ def get_keys(authfile):
                 raise Exception('Missing authentification file!')
         return cred
 
+def make_msg(t,u):
+        event = {
+                "event": {
+                        "type": "message_create",
+                        "message_create": {
+                        "target": {
+                                "recipient_id": u
+                                },
+                        "message_data": {
+                                "text": t
+                                }
+                        }
+                }
+        }
+        return event
+
 def run_tstream(auth,settings,kw,q):
         'Function for tweetstream process. Puts error in queue if stream crashes. Returns False when it crashes.'
         tstream = tweepy.Stream(auth, MyTweetListener(settings['TPERFILE']))
@@ -200,7 +216,7 @@ def setup_snek(settings):
         startmesg = 'This is snek! Syntax: ' + kw[0] + ' {replace/add/remove/stop} {optional: KW1::KW2}\n' + 'Currently set keywords: '+' '.join(kw)
         try:
                 print(startmesg)
-                api.send_direct_message(user_id = settings['USERID'], text = startmesg)
+                api.send_direct_message_new(make_msg(startmesg,settings['USERID']))
         except tweepy.TweepError as e:
                 errors.append('Error in API:'+str(e))
                 pass
@@ -230,7 +246,7 @@ def setup_snek(settings):
                 exitmesg = 'Attempting restart...'
         try:
                 print(exitmesg)
-                api.send_direct_message(user_id = settings['USERID'], text = exitmesg)
+                api.send_direct_message_new(make_msg(exitmesg,settings['USERID']))
         except tweepy.TweepError as e:
                 errors.append('Error in API:'+str(e))
                 pass
