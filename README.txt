@@ -18,7 +18,8 @@ The time spent between reconnects increases after every failed attempt, up to 15
 Connection attempt resets can be controlled in the settings.
 
 %%%% 24/10/2018
-- twitter changed the way it deals with sending DM's - for a quick fix in python 3.6.0, checkout the dm_tweepy branch and follow the instructions here to modify your tweepy install:
+- twitter changed the way it deals with sending DM's - for a quick fix in python 3.6.0, 
+checkout the dm_tweepy branch and follow the instructions here to modify your tweepy install:
 https://github.com/tweepy/tweepy/issues/1081
 
 binder.py
