@@ -8,10 +8,9 @@ import logging
 import numpy as np
 
 logging.basicConfig(filename='error.log')
-
 settings = {
-        'USERCTL':'ENTER USER HERE',         # twitter user that can send control signals
-        'USERID': 99999,              # twitter id of that user
+        'USERCTL':'Loiseaulyre',         # twitter user that can send control signals
+        'USERID':38700519 ,              # twitter id of that user
         'PARSESIG':'TpyChange',          # parse USERCTL's tweets for signal to change tweepy filter
         'TPERFILE':100,                  # how many tweets per file to save
         'KWFILE':'kw.txt',               # keyword file
@@ -68,81 +67,6 @@ class MyTweetListener(tweepy.StreamListener):
         def on_error(self, status):
                 raise Exception('Error in tweet stream:'+str(status))
                 
-class MyUserListener(tweepy.StreamListener):
-        'Class is used for monitoring the controller\'s handle, inheriting from the StreamListener class. Incoming DMs are parsed for tweetsnek commands.'
-        def __init__(self,userctl,parsesig,kwfile,histfile):
-                print('Initialising User DM stream...')
-                self.stop = False # Variable to stop whole script from DM
-                self.kw = load_kw(parsesig,kwfile)
-                self.userctl = userctl
-                self.parsesig = parsesig
-                self.kwfile = kwfile
-                self.histfile = histfile
-        
-        def on_data(self, data):
-                if 'direct_message' in data:
-                        dm = json.loads(data) # load tweet data
-                        print('Received signal DM: ',dm['direct_message']['text'])
-                        # check if tweet is command to change keywords in tweet stream
-                        if self.userctl in dm['direct_message']['sender']['screen_name'] and self.parsesig in dm['direct_message']['text']:
-                                parse = self.parsemsg(dm['direct_message']['text'])
-                                if not parse:
-                                        print('Stop signal received, else could not parse DM syntax! Did not change keywords.')
-                                        if self.stop:
-                                                return False # disconnects the stream
-                                else:
-                                        print('Successfully parsed DM. Quitting DM stream.')
-                                        mode = 'a' if Path(self.histfile).exists() else 'w'
-                                        with open(self.histfile,mode) as hf:
-                                                hf.write(time.strftime("%Y%m%d-%H%M%S") + '::' + dm['direct_message']['text'] + '\n')
-                                        print('New keywords: '+' '.join(self.kw))
-                                        with open(self.kwfile, 'w') as fp:  
-                                                for i in self.kw[1:]:
-                                                        fp.write(i+'\n')
-                                        return False # disconnects the stream
-                        else:
-                                print('Note: Received unrelated DM!')
-                                
-        def parsemsg(self,msg):
-                msg = msg.split(' ')
-                success = False
-                if msg[0]!=self.parsesig: # if first word is not the codeword
-                        print('Error in message syntax! First word not keyword.')
-                        return False
-                if len(msg)<2 or (len(msg)==2 and msg[1]!='stop'):
-                        print('Error in message syntax! Not enough arguments in message.')
-                        return False
-                
-                newkws = None if msg[1]=='stop' else msg[2].split('::')
-                        
-                if msg[1] == 'replace': # delete original keyword list (except codeword) and add all specified keywords
-                        del self.kw[1:] 
-                        for k in newkws:
-                                self.kw.append(k)
-                        success = True
-                elif msg[1] == 'add': # add all specified keywords
-                        for k in newkws:
-                                self.kw.append(k)
-                        success = True
-                elif msg[1] == 'remove': # remove all specified keywords from global keyword list (if they exist in the list)
-                        for k in newkws:
-                                for ki in range(1,len(self.kw)):
-                                        if k == self.kw[ki]:
-                                                self.kw.pop(ki)
-                                                break
-                        success = True
-                elif msg[1] == 'stop':
-                        self.stop = True
-                        print('DM stream received stop signal!')
-                        success = False
-                else:
-                        print('Error in message syntax! Second word not interpretable.')
-                        success = False
-                return success
-                                        
-        def on_error(self, status):
-                raise Exception('Error in DM stream:'+str(status))
-
 
 def load_kw(parsersig,kwfile):
         'Load monitored keywords used for the tweetstream.'
@@ -165,22 +89,6 @@ def get_keys(authfile):
                 raise Exception('Missing authentification file!')
         return cred
 
-def make_msg(t,u):
-        event = {
-                "event": {
-                        "type": "message_create",
-                        "message_create": {
-                        "target": {
-                                "recipient_id": u
-                                },
-                        "message_data": {
-                                "text": t
-                                }
-                        }
-                }
-        }
-        return event
-
 def run_tstream(auth,settings,kw,q):
         'Function for tweetstream process. Puts error in queue if stream crashes. Returns False when it crashes.'
         tstream = tweepy.Stream(auth, MyTweetListener(settings['TPERFILE']))
@@ -189,17 +97,6 @@ def run_tstream(auth,settings,kw,q):
         except Exception as e:
                 q.put(e)
                 return e
-
-def run_ustream(auth,settings,errq,stopq):
-        'Function for userstream process. Puts error in queue if stream crashes, returns True if stop signal is received.'
-        ustream = tweepy.Stream(auth, MyUserListener(settings['USERCTL'],settings['PARSESIG'],settings['KWFILE'],settings['HISTFILE']))
-        try:
-                ustream.userstream()
-                stopq.put(ustream.listener.stop)
-                return True
-        except Exception as e:
-                errq.put(e)
-                return False
 
 def setup_snek(settings):
         'Sets up authentification and Twitter API, starts stream processes for monitoring a specific set of keywords.'
@@ -216,7 +113,6 @@ def setup_snek(settings):
         startmesg = 'This is snek! Syntax: ' + kw[0] + ' {replace/add/remove/stop} {optional: KW1::KW2}\n' + 'Currently set keywords: '+' '.join(kw)
         try:
                 print(startmesg)
-                api.send_direct_message_new(make_msg(startmesg,settings['USERID']))
         except tweepy.TweepError as e:
                 errors.append('Error in API:'+str(e))
                 pass
@@ -224,19 +120,16 @@ def setup_snek(settings):
         ## SETUPSTREAM PROCESSES
         errq = Queue(maxsize=2)
         stopq = Queue(maxsize=1)
-        uproc = Process(target = run_ustream, kwargs = dict(auth=auth,settings=settings,errq=errq,stopq=stopq)) # setup userstream process
         tproc = Process(target = run_tstream, kwargs = dict(auth=auth,settings=settings,kw=kw,q=errq)) # setup tweetstream process
-        uproc.start()
         tproc.start()
         while True:
-                if not tproc.is_alive() or not uproc.is_alive() or not errq.empty() or not stopq.empty():
+                if not tproc.is_alive() or not errq.empty() or not stopq.empty():
                         stop=stopq.get() if not stopq.empty() else False
                         while not errq.empty():
                                 errors.append(str(errq.get()))
                         break;
         tproc.terminate()
-        uproc.terminate()
-        
+
         ## SEND EXIT DM
         if stop:
                 exitmesg = 'Exiting script...'
@@ -246,7 +139,6 @@ def setup_snek(settings):
                 exitmesg = 'Attempting restart...'
         try:
                 print(exitmesg)
-                api.send_direct_message_new(make_msg(exitmesg,settings['USERID']))
         except tweepy.TweepError as e:
                 errors.append('Error in API:'+str(e))
                 pass
